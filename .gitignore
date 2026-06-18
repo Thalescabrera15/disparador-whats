@@ -1,0 +1,33 @@
+# deps
+node_modules/
+.pnpm-store/
+
+# build
+dist/
+build/
+*.tsbuildinfo
+
+# env (NUNCA commitar segredos)
+.env
+.env.*
+!.env.example
+
+# prisma
+prisma/*.db
+
+# baileys / auth state local (auth canonico vive no Postgres)
+auth-sessions/
+*.session
+
+# logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json

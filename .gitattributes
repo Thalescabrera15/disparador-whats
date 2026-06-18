@@ -1,0 +1,8 @@
+# Normaliza fim de linha: LF no repositorio (evita ruido CRLF no Windows)
+* text=auto eol=lf
+
+# Binarios / lockfiles que nao devem ser tocados
+*.png binary
+*.jpg binary
+*.ico binary
+pnpm-lock.yaml -text

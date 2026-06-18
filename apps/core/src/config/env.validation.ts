@@ -1,0 +1,56 @@
+import { z } from 'zod';
+
+/**
+ * Validacao do ambiente no boot. Falha rapido se algo critico faltar.
+ * Coerce em numeros porque process.env e sempre string.
+ */
+const envSchema = z.object({
+  NODE_ENV: z
+    .enum(['development', 'test', 'production'])
+    .default('development'),
+  CORE_PORT: z.coerce.number().int().positive().default(3000),
+
+  // Infra (Railway)
+  DATABASE_URL: z.string().min(1, 'DATABASE_URL e obrigatorio'),
+  REDIS_URL: z.string().min(1, 'REDIS_URL e obrigatorio'),
+
+  // Auth
+  JWT_SECRET: z.string().min(16, 'JWT_SECRET deve ter >= 16 chars'),
+  JWT_EXPIRES_IN: z.string().default('12h'),
+
+  // LLM (opcionais no boot - validados quando um Fluxo os usar)
+  ANTHROPIC_API_KEY: z.string().optional().default(''),
+  QWEN_BASE_URL: z.string().optional().default(''),
+  WHISPER_URL: z.string().optional().default(''),
+  ELEVENLABS_API_KEY: z.string().optional().default(''),
+
+  // Storage
+  R2_ACCOUNT_ID: z.string().optional().default(''),
+  R2_ACCESS_KEY: z.string().optional().default(''),
+  R2_SECRET: z.string().optional().default(''),
+  R2_BUCKET: z.string().optional().default(''),
+
+  // Defaults de envio / anti-ban
+  DEFAULT_DAILY_CAP: z.coerce.number().int().positive().default(55),
+  DEFAULT_WINDOW_START: z.coerce.number().int().min(0).max(23).default(9),
+  DEFAULT_WINDOW_END: z.coerce.number().int().min(1).max(24).default(20),
+  RAMP_CURVE: z.string().default('5,8,15,25,35,45,55'),
+  JITTER_MIN_MS: z.coerce.number().int().nonnegative().default(45000),
+  JITTER_MAX_MS: z.coerce.number().int().nonnegative().default(180000),
+  OPTOUT_KEYWORDS: z
+    .string()
+    .default('sair,parar,pare,descadastrar,nao quero,stop,cancelar'),
+});
+
+export type Env = z.infer<typeof envSchema>;
+
+export function validateEnv(config: Record<string, unknown>): Env {
+  const parsed = envSchema.safeParse(config);
+  if (!parsed.success) {
+    const issues = parsed.error.issues
+      .map((i) => `  - ${i.path.join('.')}: ${i.message}`)
+      .join('\n');
+    throw new Error(`Configuracao de ambiente invalida:\n${issues}`);
+  }
+  return parsed.data;
+}

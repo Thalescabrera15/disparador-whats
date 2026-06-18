@@ -1,0 +1,276 @@
+// dispatch-engine - schema Prisma
+// Instancia Postgres ISOLADA (Railway). Nenhuma referencia a infra Verttex.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ FLUXOS / PRODUTOS ============
+model Flow {
+  id              String     @id @default(cuid())
+  name            String // ex: "Codigo Sena", "MLA"
+  slug            String     @unique // identificador curto
+  status          FlowStatus @default(DRAFT)
+
+  // IA do produto
+  aiModel         String // "claude-haiku-4-5" | "qwen3-30b" ...
+  systemPrompt    String   @db.Text // persona + objetivo do produto
+  knowledgeBase   String   @db.Text // oferta, preco, garantia, objecoes, FAQ
+  fewShotExamples Json // [{role, content}] exemplos de conversa
+  guardRules      Json // regras Input/OutputGuard especificas
+
+  // Regra de liberacao de link
+  linkReleaseRule Json // condicoes p/ IA poder mandar checkout
+  bridgeDomain    String // dominio-ponte de marketing deste fluxo
+  checkoutBaseUrl String // URL final do checkout (SMPay)
+
+  // Config de envio (sobrescreve default global se setado)
+  sendConfig Json? // {dailyCapPerChip, window, rampCurve, jitterMs}
+
+  openingMessages OpeningMessage[]
+  leads           Lead[]
+  conversations   Conversation[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+enum FlowStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+model OpeningMessage {
+  id       String  @id @default(cuid())
+  flowId   String
+  flow     Flow    @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  // Template de abertura. Deve pedir resposta. SEM link.
+  template String  @db.Text // suporta variaveis {nome}, etc.
+  weight   Int     @default(1) // peso na selecao aleatoria
+  active   Boolean @default(true)
+
+  @@index([flowId])
+}
+
+// ============ CHIPS (NUMEROS) ============
+model WhatsappNumber {
+  id     String     @id @default(cuid())
+  label  String // apelido interno
+  phone  String     @unique // E.164
+  status ChipStatus @default(NEW)
+
+  // Auth Baileys (persistido - NUNCA so em filesystem)
+  authState    Json? // creds + keys serializados
+  authStateRef String? // ou ponteiro p/ blob externo
+
+  // Rampa / capacidade
+  rampDay     Int       @default(0) // dia atual da curva de aquecimento
+  dailyCap    Int       @default(0) // teto efetivo de hoje (derivado da rampa)
+  sentToday   Int       @default(0)
+  lastResetAt DateTime? // reset diario do contador
+
+  // Janela e cadencia
+  windowStart Int   @default(9) // hora local de inicio (comercial)
+  windowEnd   Int   @default(20)
+  restDays    Json? // dias de descanso
+
+  // Saude
+  healthScore  Float     @default(100)
+  consecFails  Int       @default(0)
+  lastSignalAt DateTime?
+
+  // Proxy (estavel!)
+  proxyId String?
+  proxy   Proxy?  @relation(fields: [proxyId], references: [id])
+
+  // Identidade
+  profileName String?
+  hasPhoto    Boolean @default(false)
+
+  messages     Message[]
+  healthEvents HealthEvent[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([status])
+}
+
+enum ChipStatus {
+  NEW
+  WARMING
+  ACTIVE
+  PAUSED
+  COOLDOWN
+  RETIRED
+}
+
+model Proxy {
+  id       String           @id @default(cuid())
+  host     String
+  port     Int
+  username String?
+  password String?
+  type     String // "residential" | "mobile"
+  region   String // ex: "BR-SP" (casar com o numero)
+  active   Boolean          @default(true)
+  numbers  WhatsappNumber[]
+}
+
+// ============ LEADS ============
+model Lead {
+  id            String        @id @default(cuid())
+  flowId        String
+  flow          Flow          @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  phone         String // E.164
+  name          String?
+  meta          Json? // campos livres do CSV
+  source        String? // origem da base (rastreabilidade)
+  warmth        Warmth        @default(WARM) // base morna por padrao
+  status        LeadStatus    @default(PENDING)
+  slug          String        @unique // slug unico p/ link deste lead
+  importBatchId String?
+  conversation  Conversation?
+  suppressed    Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+
+  @@unique([flowId, phone]) // dedup por fluxo
+  @@index([status])
+  @@index([flowId, status])
+}
+
+enum Warmth {
+  WARM
+  ENGAGED
+  CUSTOMER
+}
+
+enum LeadStatus {
+  PENDING
+  QUEUED
+  OPENED
+  REPLIED
+  CONVERSING
+  CONVERTED
+  LOST
+  SUPPRESSED
+}
+
+model ImportBatch {
+  id         String   @id @default(cuid())
+  flowId     String
+  filename   String
+  totalRows  Int
+  validRows  Int
+  duplicates Int
+  invalid    Int
+  createdAt  DateTime @default(now())
+
+  @@index([flowId])
+}
+
+// ============ CONVERSAS / MENSAGENS ============
+model Conversation {
+  id       String    @id @default(cuid())
+  flowId   String
+  flow     Flow      @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  leadId   String    @unique
+  lead     Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  state    ConvState @default(WAITING_REPLY)
+  summary  String?   @db.Text // resumo rolante p/ contexto
+  linkSent Boolean   @default(false)
+  handoff  Boolean   @default(false) // escalou p/ humano
+  messages Message[]
+  updatedAt DateTime  @updatedAt
+}
+
+enum ConvState {
+  WAITING_REPLY
+  ACTIVE
+  LINK_RELEASED
+  CONVERTED
+  CLOSED
+  HANDOFF
+}
+
+model Message {
+  id             String          @id @default(cuid())
+  conversationId String?
+  conversation   Conversation?   @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  chipId         String?
+  chip           WhatsappNumber? @relation(fields: [chipId], references: [id], onDelete: SetNull)
+  direction      Direction // IN | OUT
+  type           MsgType // TEXT | AUDIO | IMAGE | PDF
+  content        String          @db.Text
+  mediaUrl       String?
+  waMessageId    String?
+  deliveredAt    DateTime?
+  readAt         DateTime?
+  failed         Boolean         @default(false)
+  failReason     String?
+  createdAt      DateTime        @default(now())
+
+  @@index([chipId, createdAt])
+  @@index([conversationId, createdAt])
+}
+
+enum Direction {
+  IN
+  OUT
+}
+
+enum MsgType {
+  TEXT
+  AUDIO
+  IMAGE
+  PDF
+}
+
+// ============ LINKS / BRIDGE ============
+model TrackedLink {
+  id         String    @id @default(cuid())
+  leadId     String
+  flowId     String
+  slug       String    @unique // path unico: /r/{slug}
+  targetUrl  String // checkout final montado
+  clicks     Int       @default(0)
+  firstClick DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([leadId])
+}
+
+// ============ SAUDE ============
+model HealthEvent {
+  id        String         @id @default(cuid())
+  chipId    String
+  chip      WhatsappNumber @relation(fields: [chipId], references: [id], onDelete: Cascade)
+  kind      String // SEND_FAIL | NO_READ | DISCONNECT | REPLY_DROP | RECOVERED
+  weight    Float // impacto no healthScore
+  detail    Json?
+  createdAt DateTime       @default(now())
+
+  @@index([chipId, createdAt])
+}
+
+// ============ SUPRESSAO (OPT-OUT GLOBAL) ============
+model Suppression {
+  id        String   @id @default(cuid())
+  phone     String   @unique // global, vale p/ todos os fluxos
+  reason    String // "opt-out" | "report" | "manual"
+  createdAt DateTime @default(now())
+}
+
+// ============ ADMIN ============
+model AdminUser {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  passHash  String
+  role      String   @default("admin")
+  createdAt DateTime @default(now())
+}

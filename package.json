@@ -1,0 +1,36 @@
+{
+  "name": "dispatch-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Motor de disparo WhatsApp (API nao-oficial) - standalone, isolado do Verttex",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "core:dev": "pnpm --filter @dispatch/core start:dev",
+    "worker:dev": "pnpm --filter @dispatch/session-worker start:dev",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "db:seed": "prisma db seed",
+    "format": "prettier --write \"apps/**/*.ts\" \"packages/**/*.ts\"",
+    "lint": "echo \"(lint nao configurado ainda)\""
+  },
+  "prisma": {
+    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^22.10.0",
+    "prettier": "^3.4.2",
+    "prisma": "^6.2.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.2.0",
+    "bcryptjs": "^2.4.3"
+  }
+}
