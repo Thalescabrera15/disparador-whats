@@ -55,6 +55,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   private readonly jitterMax: number;
   private readonly tickMs: number;
   private readonly enabled: boolean;
+  private readonly tz: string;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -70,6 +71,21 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     this.jitterMax = config.get<number>('JITTER_MAX_MS', 180000);
     this.tickMs = config.get<number>('SCHEDULER_TICK_MS', 15000);
     this.enabled = config.get<boolean>('SCHEDULER_ENABLED', true);
+    this.tz = config.get<string>('SCHEDULER_TZ', 'America/Sao_Paulo');
+  }
+
+  /** Hora e dia-da-semana no fuso configurado (servidor pode estar em UTC). */
+  private nowInTz(): { hour: number; weekday: number } {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: this.tz,
+      hour: 'numeric',
+      hour12: false,
+      weekday: 'short',
+    }).formatToParts(new Date());
+    const hourStr = parts.find((p) => p.type === 'hour')?.value ?? '0';
+    const wdStr = parts.find((p) => p.type === 'weekday')?.value ?? 'Sun';
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return { hour: parseInt(hourStr, 10) % 24, weekday: days.indexOf(wdStr) };
   }
 
   onModuleInit(): void {
@@ -261,13 +277,13 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private inWindow(chip: ChipRow): boolean {
-    const hour = new Date().getHours();
+    const { hour } = this.nowInTz();
     return hour >= chip.windowStart && hour < chip.windowEnd;
   }
 
   private isRestDay(chip: ChipRow): boolean {
     const days = Array.isArray(chip.restDays) ? (chip.restDays as number[]) : [];
-    return days.includes(new Date().getDay());
+    return days.includes(this.nowInTz().weekday);
   }
 
   /** Gate de jitter: so envia se passou o intervalo aleatorio do chip. */

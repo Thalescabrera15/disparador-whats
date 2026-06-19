@@ -65,5 +65,5 @@ curl -X POST http://localhost:3000/auth/login \
 - [x] **Fase 7 — Bridge de links:** `TrackedLink` (slug único por lead), `GET /r/:slug` (302 → checkout + tracking de clique), checkout nunca é o link compartilhado; integrado na IA (link liberado vira `/r/{slug}`).
 - [x] **Fase 8 — Health Monitor + kill switch:** consumer da fila HEALTH, score com decaimento/recuperação (serial por chip), políticas automáticas (SOFT → reduz rampa · COOLDOWN → pausa · RETIRE → aposenta) + kill switch via CONTROL. Core é dono do status do chip.
 - [ ] Fase 9 — Fluxos/IA por produto
-- [ ] Fase 10 — Painel + métricas
-- [ ] Fase 11 — Hardening
+- [x] **Fase 10 — Painel (enxuto):** SPA Vite+React (`apps/panel`) com o fluxo + as decisões: conectar números (QR), campanha+IA (persona/knowledge/templates+preview/import), disparo (selecionar números pelo nome + política de link + start/pause) e **testar a IA** (dry-run). `pnpm panel:dev`.
+- [~] Fase 11 — Hardening: timezone da janela (`SCHEDULER_TZ`), custo do summary, health serial por chip, status no core. *Demais achados médios em andamento.*

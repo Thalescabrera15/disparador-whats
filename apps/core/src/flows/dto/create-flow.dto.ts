@@ -51,6 +51,26 @@ export class UpdateFlowDto {
   @MaxLength(120)
   name?: string;
 
+  @IsOptional()
+  @IsString()
+  aiModel?: string;
+
+  @IsOptional()
+  @IsString()
+  systemPrompt?: string;
+
+  @IsOptional()
+  @IsString()
+  knowledgeBase?: string;
+
+  @IsOptional()
+  @IsString()
+  checkoutBaseUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  bridgeDomain?: string;
+
   /** Constantes de template da campanha (substitui o conjunto atual). */
   @IsOptional()
   @IsObject()

@@ -42,9 +42,13 @@ export class AiService {
     return this.stub;
   }
 
-  async generate(aiModel: string | undefined, messages: LlmMessage[]) {
+  async generate(
+    aiModel: string | undefined,
+    messages: LlmMessage[],
+    overrides?: Partial<GenConfig>,
+  ) {
     const adapter = this.pick(aiModel);
-    const text = await adapter.generate(messages, this.genCfg);
+    const text = await adapter.generate(messages, { ...this.genCfg, ...overrides });
     return { text, adapter: adapter.name };
   }
 }

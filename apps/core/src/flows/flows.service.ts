@@ -56,15 +56,17 @@ export class FlowsService {
 
   async update(id: string, dto: UpdateFlowDto) {
     await this.get(id);
-    return this.prisma.flow.update({
-      where: { id },
-      data: {
-        ...(dto.name !== undefined ? { name: dto.name } : {}),
-        ...(dto.variables !== undefined
-          ? { variables: dto.variables as Prisma.InputJsonValue }
-          : {}),
-      },
-    });
+    const data: Prisma.FlowUpdateInput = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.aiModel !== undefined) data.aiModel = dto.aiModel;
+    if (dto.systemPrompt !== undefined) data.systemPrompt = dto.systemPrompt;
+    if (dto.knowledgeBase !== undefined) data.knowledgeBase = dto.knowledgeBase;
+    if (dto.checkoutBaseUrl !== undefined) data.checkoutBaseUrl = dto.checkoutBaseUrl;
+    if (dto.bridgeDomain !== undefined) data.bridgeDomain = dto.bridgeDomain;
+    if (dto.variables !== undefined) {
+      data.variables = dto.variables as Prisma.InputJsonValue;
+    }
+    return this.prisma.flow.update({ where: { id }, data });
   }
 
   async get(id: string) {

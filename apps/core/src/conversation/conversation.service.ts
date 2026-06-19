@@ -501,14 +501,18 @@ export class ConversationService {
         .slice(-this.summaryEvery)
         .map((h) => `${h.direction === 'IN' ? 'Lead' : 'Vendedor'}: ${h.content}`)
         .join('\n');
-      const out = await this.ai.generate(ctx.flow.aiModel, [
-        {
-          role: 'system',
-          content:
-            'Resuma a conversa abaixo em 2-3 linhas, preservando: interesse do lead, objeções já tratadas e se o link já foi enviado. Só o resumo.',
-        },
-        { role: 'user', content: recent },
-      ]);
+      const out = await this.ai.generate(
+        ctx.flow.aiModel,
+        [
+          {
+            role: 'system',
+            content:
+              'Resuma a conversa abaixo em 2-3 linhas, preservando: interesse do lead, objeções já tratadas e se o link já foi enviado. Só o resumo, sem raciocínio.',
+          },
+          { role: 'user', content: recent },
+        ],
+        { maxTokens: 1200 },
+      );
       if (out.text.trim()) {
         await this.prisma.conversation.update({
           where: { id: ctx.conversation.id },

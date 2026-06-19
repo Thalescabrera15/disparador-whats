@@ -64,6 +64,8 @@ const envSchema = z.object({
     .default('true')
     .transform((v) => v === 'true'),
   SCHEDULER_TICK_MS: z.coerce.number().int().positive().default(15000),
+  // Fuso da janela comercial (servidor pode rodar em UTC, ex: Railway).
+  SCHEDULER_TZ: z.string().default('America/Sao_Paulo'),
   OPTOUT_KEYWORDS: z
     .string()
     .default(

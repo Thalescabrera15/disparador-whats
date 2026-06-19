@@ -10,6 +10,7 @@
     "build": "pnpm -r build",
     "core:dev": "pnpm --filter @dispatch/core start:dev",
     "worker:dev": "pnpm --filter @dispatch/session-worker start:dev",
+    "panel:dev": "pnpm --filter @dispatch/panel dev",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
