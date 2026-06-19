@@ -152,10 +152,22 @@ export class Supervisor {
   private async onOpening(job: OpeningJob): Promise<void> {
     const session = this.sessions.get(job.chipId);
     if (!session) {
-      // Fase 2: sem auto-start de sessao em job de envio (vem na Fase 3/5).
+      await this.publishHealth(job.chipId, 'SEND_FAIL', { reason: 'no_session' });
       throw new Error(`sessao do chip ${job.chipId} nao esta ativa`);
     }
-    await session.send({ to: job.to, type: 'TEXT', parts: [job.text] });
+    try {
+      await session.send({
+        to: job.to,
+        type: 'TEXT',
+        parts: [job.text],
+        typingDelaysMs: job.typingDelayMs ? [job.typingDelayMs] : undefined,
+      });
+    } catch (err) {
+      await this.publishHealth(job.chipId, 'SEND_FAIL', {
+        error: (err as Error).message,
+      });
+      throw err;
+    }
   }
 
   private async onOutbound(job: OutboundJob): Promise<void> {
@@ -192,14 +204,16 @@ export class Supervisor {
     );
 
     // Reflete no Postgres: chip recem-conectado entra aquecendo (rampa minima).
+    // lastResetAt=now garante que o reset diario nao "pule" o dia 1.
     if (status === 'CONNECTED') {
+      const now = new Date();
       await this.prisma.whatsappNumber.updateMany({
         where: { id: chipId, status: 'NEW' },
-        data: { status: 'WARMING', rampDay: 1, dailyCap: 5 },
+        data: { status: 'WARMING', rampDay: 1, dailyCap: 5, lastResetAt: now },
       });
       await this.prisma.whatsappNumber.update({
         where: { id: chipId },
-        data: { lastSignalAt: new Date() },
+        data: { lastSignalAt: now },
       });
     }
   }

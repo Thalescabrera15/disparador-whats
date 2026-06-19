@@ -29,7 +29,9 @@ export interface OpeningJob {
   leadId: string;
   chipId: string;
   to: string; // E.164
-  text: string; // template ja renderizado, SEM link
+  text: string; // template ja renderizado
+  /** Delay de digitacao (ms) antes de enviar (humanizacao). */
+  typingDelayMs?: number;
 }
 
 /** Job: enviar resposta da IA. Core -> Worker. */

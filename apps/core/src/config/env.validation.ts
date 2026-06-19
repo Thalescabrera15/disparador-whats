@@ -43,6 +43,13 @@ const envSchema = z.object({
   RAMP_CURVE: z.string().default('5,8,15,25,35,45,55'),
   JITTER_MIN_MS: z.coerce.number().int().nonnegative().default(45000),
   JITTER_MAX_MS: z.coerce.number().int().nonnegative().default(180000),
+
+  // Scheduler (motor de disparo)
+  SCHEDULER_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  SCHEDULER_TICK_MS: z.coerce.number().int().positive().default(15000),
   OPTOUT_KEYWORDS: z
     .string()
     .default('sair,parar,pare,descadastrar,nao quero,stop,cancelar'),

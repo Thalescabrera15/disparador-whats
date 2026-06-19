@@ -10,6 +10,7 @@ import { LeadsModule } from './leads/leads.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProxiesModule } from './proxies/proxies.module';
 import { RedisModule } from './redis/redis.module';
+import { SchedulerModule } from './scheduler/scheduler.module';
 
 @Module({
   imports: [
@@ -26,8 +27,9 @@ import { RedisModule } from './redis/redis.module';
     FlowsModule,
     LeadsModule,
     DispatchesModule,
-    // Proximas fases: SchedulerModule (disparo revezando chips),
-    // ConversationModule + AiModule (Qwen), HealthMonitorModule, BridgeModule, SuppressionModule.
+    SchedulerModule,
+    // Proximas fases: ConversationModule + AiModule (Qwen),
+    // HealthMonitorModule, BridgeModule, SuppressionModule.
   ],
 })
 export class AppModule {}
