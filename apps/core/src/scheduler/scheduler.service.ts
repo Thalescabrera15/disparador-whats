@@ -251,7 +251,9 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
 
   private canSend(chip: ChipRow): boolean {
     if (chip.status !== 'ACTIVE' && chip.status !== 'WARMING') return false;
-    if (chip.healthScore < HEALTH_THRESHOLDS.SOFT) return false;
+    // < COOLDOWN: nem envia (o Health Monitor já deve ter posto em COOLDOWN).
+    // banda COOLDOWN..SOFT: envia com teto reduzido pelo Health Monitor.
+    if (chip.healthScore < HEALTH_THRESHOLDS.COOLDOWN) return false;
     if (chip.dailyCap - chip.sentToday <= 0) return false;
     if (!this.inWindow(chip)) return false;
     if (this.isRestDay(chip)) return false;

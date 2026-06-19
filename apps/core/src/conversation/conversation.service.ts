@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
 import { InboundEvent, OutboundJob } from '@dispatch/shared';
 import { AiService } from '../ai/ai.service';
+import { BridgeService } from '../bridge/bridge.service';
 import { detectInjection } from '../ai/guards/input-guard';
 import { runOutputGuard } from '../ai/guards/output-guard';
 import {
@@ -91,6 +92,7 @@ export class ConversationService {
     private readonly prisma: PrismaService,
     private readonly ai: AiService,
     private readonly suppression: SuppressionService,
+    private readonly bridge: BridgeService,
     config: ConfigService,
     @Inject(QUEUE_OUTBOUND) private readonly outbound: Queue<OutboundJob>,
   ) {
@@ -301,10 +303,15 @@ export class ConversationService {
     const gen = await this.generateGuarded(ctx, linkAllowed, guards);
     let reply = gen.text;
 
-    // 5) LINK RELEASE (injetado pelo código, nunca pela IA)
+    // 5) LINK RELEASE (injetado pelo código, nunca pela IA) — bridge /r/{slug}
     let linkReleased = false;
     if (linkAllowed && !ctx.conversation.linkSent) {
-      const link = this.buildLink(ctx);
+      const link = ctx.persist
+        ? await this.bridge.getOrCreateTrackedLink(
+            ctx.conversation.leadId,
+            ctx.flow.id,
+          )
+        : this.bridge.previewUrl(ctx.flow, ctx.conversation.lead.slug);
       if (link) {
         reply = reply ? `${reply}\n\n${link}` : link;
         linkReleased = true;
@@ -400,15 +407,6 @@ export class ConversationService {
     if (inboundCount < (rule.minInboundTurns ?? 2)) return false;
     const t = norm(ctx.incoming);
     return (rule.intentKeywords ?? []).some((k) => t.includes(norm(k)));
-  }
-
-  private buildLink(ctx: TurnContext): string | null {
-    // Fase 7 (bridge) troca por link rastreável com slug único.
-    if (ctx.flow.bridgeDomain && ctx.conversation.lead.slug) {
-      return `https://${ctx.flow.bridgeDomain}/r/${ctx.conversation.lead.slug}`;
-    }
-    if (ctx.flow.checkoutBaseUrl) return ctx.flow.checkoutBaseUrl;
-    return null;
   }
 
   private isHandoffRequest(text: string): boolean {

@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { Queue, Worker } from 'bullmq';
 import { Redis } from 'ioredis';
 import {
@@ -70,6 +70,30 @@ export class Supervisor {
     );
 
     console.log(`[Supervisor ${this.workerId}] pronto (aguardando comandos/jobs)`);
+    void this.recoverSessions(); // re-sobe sessoes em background (com stagger)
+  }
+
+  /**
+   * Auto-recovery: ao subir, re-conecta os chips que estavam vivos
+   * (ACTIVE/WARMING com auth state). Stagger anti-ban: nunca reconectar a frota
+   * inteira em uníssono.
+   */
+  private async recoverSessions(): Promise<void> {
+    const chips = await this.prisma.whatsappNumber.findMany({
+      where: {
+        status: { in: ['ACTIVE', 'WARMING'] },
+        authState: { not: Prisma.DbNull },
+      },
+      select: { id: true },
+    });
+    if (!chips.length) return;
+    console.log(`[Supervisor ${this.workerId}] recuperando ${chips.length} sessao(oes)...`);
+    for (const chip of chips) {
+      if (this.sessions.has(chip.id)) continue;
+      await this.startSession(chip.id);
+      // intervalo 3-7s entre reconexoes (anti-thundering-herd / anti-ban)
+      await new Promise((r) => setTimeout(r, 3000 + Math.floor(Math.random() * 4000)));
+    }
   }
 
   // ---------------- ciclo de vida da sessao ----------------
@@ -82,10 +106,8 @@ export class Supervisor {
         await this.startSession(cmd.chipId, cmd.usePairingCode);
         break;
       case 'STOP':
-        await this.stopSession(cmd.chipId, 'PAUSED');
-        break;
       case 'RETIRE':
-        await this.stopSession(cmd.chipId, 'RETIRED');
+        await this.stopSession(cmd.chipId);
         break;
     }
   }
@@ -131,26 +153,20 @@ export class Supervisor {
     }
   }
 
-  private async stopSession(
-    chipId: string,
-    finalStatus: 'PAUSED' | 'RETIRED',
-  ): Promise<void> {
+  /**
+   * Para a sessao deste worker (se hospeda o chip). NAO escreve status: o CORE
+   * é dono do status (evita clobber cross-worker via fila CONTROL compartilhada).
+   */
+  private async stopSession(chipId: string): Promise<void> {
     const session = this.sessions.get(chipId);
-    // So age (e escreve status) se ESTE worker hospeda o chip. A fila CONTROL e
-    // compartilhada (competing consumers): sem este guard, um STOP destinado a
-    // outro worker sobrescreveria o status de um chip ativo alheio.
     if (!session) return;
     await session.stop();
     this.sessions.delete(chipId);
-    await this.prisma.whatsappNumber.update({
-      where: { id: chipId },
-      data: { status: finalStatus },
-    });
   }
 
   /** Kill switch: derruba 1 chip isoladamente (sem afetar vizinhos). */
   async killChip(chipId: string): Promise<void> {
-    await this.stopSession(chipId, 'PAUSED');
+    await this.stopSession(chipId);
   }
 
   // ---------------- envio (roteamento de jobs) ----------------

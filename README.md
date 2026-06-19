@@ -58,12 +58,12 @@ curl -X POST http://localhost:3000/auth/login \
 
 - [x] **Fase 1 — Fundação:** monorepo, Prisma schema completo, Postgres/Redis, auth admin, health/liveness, esqueleto do worker.
 - [x] **Fase 2 — Sessão Baileys:** sessão real (connect/QR/pairing code/reconnect), **auth state persistido no Postgres** (BufferJSON), bind de proxy estável antes do connect, canal de controle (PAIR/START/STOP/RETIRE) core↔worker, QR/status publicados no Redis, `ChipsModule`+`ProxiesModule` (`/chips`, `/chips/:id/pair`, bind-proxy, health).
-- [ ] Fase 3 — Multi-sessão (worker + supervisor + reconexão + kill switch) — *Supervisor já é multi-sessão; falta rebalanceamento entre workers*
+- [x] **Fase 3 — Multi-sessão:** Supervisor multi-sessão + **auto-recovery no boot** (re-sobe sessões ACTIVE/WARMING com stagger) + kill switch. *Falta rebalanceamento entre múltiplos workers.*
 - [x] **Fase 4 — Leads:** import CSV **e** XLSX (`POST /flows/:id/leads/import`), normalização E.164, dedup (no arquivo + no fluxo), cruza supressão, slug por lead, `ImportBatch`; `FlowsModule` (campanha com defaults). XLSX trata telefone-como-número.
 - [x] **Fase 5 — Disparo:** **Disparo** (nº variável de chips **selecionados pelo nome**, `allowLinkInOpening` por disparo), **templates** com **variáveis** (`{nome}`, custom, constantes, fallback) + preview, **insights por número**, e o **motor de revezamento (scheduler)**: reveza chips respeitando rampa/teto/janela/jitter/saúde, renderiza, enfileira o envio, reset diário, conclusão automática do disparo. Validado: revezamento, jitter gate, teto, lifecycle de lead, DONE.
 - [x] **Fase 6 — Conversational Engine:** IA de **venda direta** em trilhos — adapters (stub + **Venice/Qwen uncensored** OpenAI-compat), prompt builder com script em etapas + variáveis + few-shot + resumo rolante, **InputGuard** (opt-out com guarda de negação) + **OutputGuard** (tira link/overpromise/repetição → regenera), **gate de link determinístico**, handoff humano, **dry-run** (`/conversation/preview`), consumer INBOUND com idempotência (jobId + unique waMessageId), supressão global + un-suppress. Revisão adversarial: 31 achados, 7 críticos/altos corrigidos.
-- [ ] Fase 7 — Bridge de links
-- [ ] Fase 8 — Health Monitor + kill switch
+- [x] **Fase 7 — Bridge de links:** `TrackedLink` (slug único por lead), `GET /r/:slug` (302 → checkout + tracking de clique), checkout nunca é o link compartilhado; integrado na IA (link liberado vira `/r/{slug}`).
+- [x] **Fase 8 — Health Monitor + kill switch:** consumer da fila HEALTH, score com decaimento/recuperação (serial por chip), políticas automáticas (SOFT → reduz rampa · COOLDOWN → pausa · RETIRE → aposenta) + kill switch via CONTROL. Core é dono do status do chip.
 - [ ] Fase 9 — Fluxos/IA por produto
 - [ ] Fase 10 — Painel + métricas
 - [ ] Fase 11 — Hardening

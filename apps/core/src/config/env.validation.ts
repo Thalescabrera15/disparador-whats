@@ -24,6 +24,10 @@ const envSchema = z.object({
     .default('false')
     .transform((v) => v === 'true'),
 
+  // Base publica do bridge de links (fallback quando o fluxo nao tem bridgeDomain).
+  // ex: "https://meu-dominio-ponte.com". Vazio = usa flow.bridgeDomain ou checkout direto.
+  PUBLIC_BASE_URL: z.string().optional().default(''),
+
   // LLM (opcionais no boot - validados quando um Fluxo os usar)
   ANTHROPIC_API_KEY: z.string().optional().default(''),
   QWEN_BASE_URL: z.string().optional().default(''),
