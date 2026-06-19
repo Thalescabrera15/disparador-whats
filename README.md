@@ -61,7 +61,7 @@ curl -X POST http://localhost:3000/auth/login \
 - [ ] Fase 3 — Multi-sessão (worker + supervisor + reconexão + kill switch) — *Supervisor já é multi-sessão; falta rebalanceamento entre workers*
 - [x] **Fase 4 — Leads:** import CSV **e** XLSX (`POST /flows/:id/leads/import`), normalização E.164, dedup (no arquivo + no fluxo), cruza supressão, slug por lead, `ImportBatch`; `FlowsModule` (campanha com defaults). XLSX trata telefone-como-número.
 - [x] **Fase 5 — Disparo:** **Disparo** (nº variável de chips **selecionados pelo nome**, `allowLinkInOpening` por disparo), **templates** com **variáveis** (`{nome}`, custom, constantes, fallback) + preview, **insights por número**, e o **motor de revezamento (scheduler)**: reveza chips respeitando rampa/teto/janela/jitter/saúde, renderiza, enfileira o envio, reset diário, conclusão automática do disparo. Validado: revezamento, jitter gate, teto, lifecycle de lead, DONE.
-- [ ] Fase 6 — Conversational Engine (guards + prompt por Fluxo + IA + summary)
+- [x] **Fase 6 — Conversational Engine:** IA de **venda direta** em trilhos — adapters (stub + **Venice/Qwen uncensored** OpenAI-compat), prompt builder com script em etapas + variáveis + few-shot + resumo rolante, **InputGuard** (opt-out com guarda de negação) + **OutputGuard** (tira link/overpromise/repetição → regenera), **gate de link determinístico**, handoff humano, **dry-run** (`/conversation/preview`), consumer INBOUND com idempotência (jobId + unique waMessageId), supressão global + un-suppress. Revisão adversarial: 31 achados, 7 críticos/altos corrigidos.
 - [ ] Fase 7 — Bridge de links
 - [ ] Fase 8 — Health Monitor + kill switch
 - [ ] Fase 9 — Fluxos/IA por produto

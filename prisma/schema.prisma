@@ -249,6 +249,7 @@ model Message {
   failReason     String?
   createdAt      DateTime        @default(now())
 
+  @@unique([chipId, waMessageId]) // idempotência do inbound (nulls são distintos)
   @@index([chipId, createdAt])
   @@index([conversationId, createdAt])
 }

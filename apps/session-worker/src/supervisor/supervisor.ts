@@ -41,6 +41,12 @@ export class Supervisor {
   async start(): Promise<void> {
     this.inboundQueue = new Queue<InboundEvent>(QUEUE.INBOUND, {
       connection: this.connection,
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
+        removeOnComplete: { age: 3600, count: 1000 },
+        removeOnFail: { age: 24 * 3600 },
+      },
     });
     this.healthQueue = new Queue<HealthSignalJob>(QUEUE.HEALTH, {
       connection: this.connection,
@@ -237,7 +243,10 @@ export class Supervisor {
       waMessageId: msg.waMessageId,
       timestamp: Date.now(),
     };
-    await this.inboundQueue.add('inbound', event);
+    // jobId pelo waMessageId: redelivery do MESMO inbound não duplica o job.
+    await this.inboundQueue.add('inbound', event, {
+      jobId: msg.waMessageId ? `in:${chipId}:${msg.waMessageId}` : undefined,
+    });
   }
 
   private async publishHealth(

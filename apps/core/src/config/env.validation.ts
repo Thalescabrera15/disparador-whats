@@ -27,8 +27,18 @@ const envSchema = z.object({
   // LLM (opcionais no boot - validados quando um Fluxo os usar)
   ANTHROPIC_API_KEY: z.string().optional().default(''),
   QWEN_BASE_URL: z.string().optional().default(''),
+  QWEN_API_KEY: z.string().optional().default(''),
+  QWEN_MODEL: z.string().optional().default('qwen2.5-32b-instruct'),
   WHISPER_URL: z.string().optional().default(''),
   ELEVENLABS_API_KEY: z.string().optional().default(''),
+
+  // Conversational Engine
+  // adapter default 'stub' (deterministico) ate o Qwen estar configurado.
+  AI_ADAPTER: z.enum(['stub', 'qwen']).default('stub'),
+  AI_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.4),
+  AI_MAX_TOKENS: z.coerce.number().int().positive().default(400),
+  AI_RECENT_TURNS: z.coerce.number().int().positive().default(10),
+  AI_SUMMARY_EVERY: z.coerce.number().int().positive().default(8),
 
   // Storage
   R2_ACCOUNT_ID: z.string().optional().default(''),
@@ -52,7 +62,9 @@ const envSchema = z.object({
   SCHEDULER_TICK_MS: z.coerce.number().int().positive().default(15000),
   OPTOUT_KEYWORDS: z
     .string()
-    .default('sair,parar,pare,descadastrar,nao quero,stop,cancelar'),
+    .default(
+      'descadastrar,sair,parar,pare,nao quero receber,nao quero mais,para de me mandar,pare de me mandar,para de enviar,pare de enviar,remover,cancelar,stop,unsubscribe',
+    ),
 });
 
 export type Env = z.infer<typeof envSchema>;
