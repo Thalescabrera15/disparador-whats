@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Redirect } from '@nestjs/common';
 import { HealthService } from './health.service';
 
 /**
@@ -8,6 +8,13 @@ import { HealthService } from './health.service';
 @Controller()
 export class HealthController {
   constructor(private readonly health: HealthService) {}
+
+  /** Raiz -> painel. */
+  @Get()
+  @Redirect('/app', 302)
+  root() {
+    return;
+  }
 
   @Get('healthz')
   liveness() {

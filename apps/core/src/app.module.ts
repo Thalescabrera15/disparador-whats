@@ -1,5 +1,7 @@
+import { join } from 'node:path';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ServeStaticModule } from '@nestjs/serve-static';
 import { AiModule } from './ai/ai.module';
 import { AuthModule } from './auth/auth.module';
 import { BridgeModule } from './bridge/bridge.module';
@@ -22,6 +24,11 @@ import { SuppressionModule } from './suppression/suppression.module';
     ConfigModule.forRoot({
       isGlobal: true,
       validate: validateEnv,
+    }),
+    // Serve o painel (build do Vite copiado p/ apps/core/public) em /app
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', 'public'),
+      serveRoot: '/app',
     }),
     PrismaModule,
     RedisModule,

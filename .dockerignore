@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/.next
+.git
+.gitignore
+**/.env
+**/.env.*
+!**/.env.example
+*.log
+.pnpm-store
+docs
+README.md
+apps/core/public/*
+!apps/core/public/.gitkeep

@@ -13,6 +13,7 @@ import { QUEUE_CONTROL } from '../redis/redis.tokens';
 
 const RECOVERY_PER_HOUR = 2; // cura passiva por hora sem sinal ruim
 const COOLDOWN_RAMP_CAP = 5; // teto reduzido ao voltar de cooldown
+const COOLDOWN_MINUTES = 60; // tempo em COOLDOWN antes de tentar religar
 
 /**
  * Health Monitor + kill switch. A saúde é INFERIDA por sinais indiretos
@@ -76,12 +77,13 @@ export class HealthMonitorService {
       data: { chipId, kind, weight, detail: (detail ?? {}) as object },
     });
 
-    // cura passiva pelo tempo sem sinal + peso do sinal atual
+    // cura passiva pelo tempo sem sinal — só quando o sinal NÃO é ruim
+    // (senão um chip martelado de leve "cicatriza" e escapa do RETIRE)
     const now = new Date();
     const hours = chip.lastSignalAt
       ? (now.getTime() - chip.lastSignalAt.getTime()) / 3_600_000
       : 0;
-    const healed = Math.min(hours * RECOVERY_PER_HOUR, 100);
+    const healed = weight < 0 ? 0 : Math.min(hours * RECOVERY_PER_HOUR, 100);
     const score = clamp(chip.healthScore + healed + weight, 0, 100);
 
     let consecFails = chip.consecFails;
@@ -160,10 +162,31 @@ export class HealthMonitorService {
   private async recover(id: string, score: number): Promise<void> {
     await this.prisma.whatsappNumber.update({
       where: { id },
-      data: { status: ChipStatus.WARMING, dailyCap: COOLDOWN_RAMP_CAP },
+      data: { status: ChipStatus.WARMING, dailyCap: COOLDOWN_RAMP_CAP, consecFails: 0 },
     });
     await this.control.add('control', { type: 'START', chipId: id });
     this.logger.log(`RECOVER chip=${id} (score=${score.toFixed(0)}) -> WARMING`);
+  }
+
+  /**
+   * Varredura periódica: COOLDOWN é temporário. Um chip parado não emite sinais,
+   * então sem isso ele ficaria preso para sempre (deadlock). Após COOLDOWN_MINUTES
+   * sem sinal ruim, recupera curando o score acima do limiar e religando a sessão.
+   */
+  async sweepCooldowns(): Promise<void> {
+    const cutoff = new Date(Date.now() - COOLDOWN_MINUTES * 60_000);
+    const chips = await this.prisma.whatsappNumber.findMany({
+      where: { status: ChipStatus.COOLDOWN, lastSignalAt: { lt: cutoff } },
+      select: { id: true, healthScore: true },
+    });
+    for (const c of chips) {
+      const score = clamp(c.healthScore + 25, HEALTH_THRESHOLDS.SOFT, 100);
+      await this.prisma.whatsappNumber.update({
+        where: { id: c.id },
+        data: { healthScore: score, lastSignalAt: new Date() },
+      });
+      await this.recover(c.id, score);
+    }
   }
 }
 

@@ -50,6 +50,12 @@ export class Supervisor {
     });
     this.healthQueue = new Queue<HealthSignalJob>(QUEUE.HEALTH, {
       connection: this.connection,
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
+        removeOnComplete: { age: 3600, count: 1000 },
+        removeOnFail: { age: 24 * 3600 },
+      },
     });
 
     this.workers.push(
@@ -120,10 +126,15 @@ export class Supervisor {
 
     const chip = await this.prisma.whatsappNumber.findUnique({
       where: { id: chipId },
-      select: { id: true, phone: true },
+      select: { id: true, phone: true, status: true },
     });
     if (!chip) {
       console.error(`[Supervisor] chip ${chipId} inexistente`);
+      return;
+    }
+    // não ressuscitar chip aposentado (kill switch corre contra START/recovery)
+    if (chip.status === 'RETIRED') {
+      console.log(`[Supervisor] chip ${chipId} RETIRED; ignorando start`);
       return;
     }
 

@@ -106,16 +106,23 @@ export class ChipsService {
 
   async sendControl(id: string, type: ControlCommand['type']) {
     await this.get(id);
-    // o CORE é dono do status; o worker só liga/desliga a sessão
+    // o CORE é dono do status; o worker só liga/desliga a sessão.
     if (type === 'STOP') {
-      await this.prisma.whatsappNumber.update({
-        where: { id },
+      // não desfaz RETIRED (terminal)
+      await this.prisma.whatsappNumber.updateMany({
+        where: { id, status: { not: 'RETIRED' } },
         data: { status: 'PAUSED' },
       });
     } else if (type === 'RETIRE') {
       await this.prisma.whatsappNumber.update({
         where: { id },
         data: { status: 'RETIRED' },
+      });
+    } else if (type === 'START') {
+      // despausa: tira de PAUSED/COOLDOWN de volta p/ aquecendo
+      await this.prisma.whatsappNumber.updateMany({
+        where: { id, status: { in: ['PAUSED', 'COOLDOWN'] } },
+        data: { status: 'WARMING' },
       });
     }
     await this.control.add('control', { type, chipId: id });

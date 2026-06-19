@@ -1,5 +1,6 @@
-const BASE =
-  (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3000';
+// Em produção o painel é servido pela própria Core (mesma origem) -> BASE relativo "".
+// Em dev (painel em :5173), defina VITE_API_URL=http://localhost:3000 no apps/panel/.env
+const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
 
 const TOKEN_KEY = 'dispatch_token';
 

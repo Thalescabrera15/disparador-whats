@@ -51,17 +51,24 @@ export class BridgeService {
     return `${bridge}/r/${slug}`;
   }
 
-  /** Resolve o slug, registra o clique e devolve o destino (checkout). */
+  /** Resolve o slug, registra o clique (best-effort) e devolve o destino. */
   async resolveAndClick(slug: string): Promise<string> {
     const link = await this.prisma.trackedLink.findUnique({ where: { slug } });
     if (!link) throw new NotFoundException('link nao encontrado');
-    await this.prisma.trackedLink.update({
-      where: { slug },
-      data: {
-        clicks: { increment: 1 },
-        firstClick: link.firstClick ?? new Date(),
-      },
-    });
+    // só http(s) (evita open-redirect p/ esquemas perigosos)
+    if (!/^https?:\/\//i.test(link.targetUrl)) {
+      throw new NotFoundException('destino invalido');
+    }
+    // best-effort: NUNCA segurar o redirect do lead por causa do contador
+    void this.prisma.trackedLink
+      .update({
+        where: { slug },
+        data: {
+          clicks: { increment: 1 },
+          firstClick: link.firstClick ?? new Date(),
+        },
+      })
+      .catch(() => undefined);
     return link.targetUrl;
   }
 

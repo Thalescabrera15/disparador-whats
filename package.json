@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Motor de disparo WhatsApp (API nao-oficial) - standalone, isolado do Verttex",
+  "packageManager": "pnpm@11.5.1",
   "engines": {
     "node": ">=20"
   },

@@ -19,9 +19,10 @@ async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
 
   const config = app.get(ConfigService);
-  const port = config.get<number>('CORE_PORT', 3000);
+  // Railway injeta PORT; localmente usa CORE_PORT (default 3000).
+  const port = Number(process.env.PORT) || config.get<number>('CORE_PORT', 3000);
 
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
   new Logger('Bootstrap').log(`Core ouvindo na porta ${port}`);
 }
 

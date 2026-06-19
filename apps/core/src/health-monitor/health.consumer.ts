@@ -22,6 +22,8 @@ export class HealthConsumer implements OnModuleInit, OnModuleDestroy {
     private readonly monitor: HealthMonitorService,
   ) {}
 
+  private sweepTimer?: NodeJS.Timeout;
+
   onModuleInit(): void {
     this.worker = new Worker<HealthSignalJob>(
       QUEUE.HEALTH,
@@ -37,10 +39,19 @@ export class HealthConsumer implements OnModuleInit, OnModuleDestroy {
     this.worker.on('failed', (job, err) =>
       this.logger.error(`health job ${job?.id} falhou: ${err.message}`),
     );
+    // COOLDOWN é temporário: religa chips recuperados (evita deadlock)
+    this.sweepTimer = setInterval(
+      () =>
+        void this.monitor
+          .sweepCooldowns()
+          .catch((e) => this.logger.error(`sweepCooldowns: ${e.message}`)),
+      5 * 60_000,
+    );
     this.logger.log('Consumindo fila HEALTH');
   }
 
   async onModuleDestroy(): Promise<void> {
+    if (this.sweepTimer) clearInterval(this.sweepTimer);
     await this.worker?.close();
   }
 }
