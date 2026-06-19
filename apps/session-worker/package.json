@@ -10,13 +10,20 @@
   },
   "dependencies": {
     "@dispatch/shared": "workspace:*",
+    "@hapi/boom": "^10.0.1",
     "@prisma/client": "^6.2.0",
+    "baileys": "7.0.0-rc13",
     "bullmq": "^5.34.0",
     "dotenv": "^16.4.7",
-    "ioredis": "5.10.1"
+    "https-proxy-agent": "^7.0.6",
+    "ioredis": "5.10.1",
+    "pino": "^9.5.0",
+    "qrcode": "^1.5.4",
+    "socks-proxy-agent": "^8.0.5"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "@types/qrcode": "^1.5.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.2"
   }

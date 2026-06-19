@@ -16,6 +16,8 @@ export const QUEUE = {
   INBOUND: 'inbound',
   /** Worker publica sinais de saude inferidos (falha, sem read, disconnect...). */
   HEALTH: 'health',
+  /** Comandos de ciclo de vida de sessao: Core -> Worker (pair/start/stop/retire). */
+  CONTROL: 'control',
 } as const;
 
 export type QueueName = (typeof QUEUE)[keyof typeof QUEUE];

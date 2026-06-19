@@ -34,4 +34,6 @@ export const env = {
   DATABASE_URL: required('DATABASE_URL'),
   /** Id deste worker (p/ rebalanceamento de chips entre workers). */
   WORKER_ID: process.env.WORKER_ID ?? 'worker-1',
+  /** DEV: permite conectar sem proxy. Default false (anti-ban exige proxy). */
+  ALLOW_PAIR_WITHOUT_PROXY: process.env.ALLOW_PAIR_WITHOUT_PROXY === 'true',
 };

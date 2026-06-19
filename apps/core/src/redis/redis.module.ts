@@ -10,6 +10,7 @@ import { Queue } from 'bullmq';
 import IORedis, { Redis } from 'ioredis';
 import { QUEUE } from '@dispatch/shared';
 import {
+  QUEUE_CONTROL,
   QUEUE_HEALTH,
   QUEUE_INBOUND,
   QUEUE_OPENINGS,
@@ -54,6 +55,7 @@ const queueProviders: Provider[] = [
   queueProvider(QUEUE_OUTBOUND, QUEUE.OUTBOUND),
   queueProvider(QUEUE_INBOUND, QUEUE.INBOUND),
   queueProvider(QUEUE_HEALTH, QUEUE.HEALTH),
+  queueProvider(QUEUE_CONTROL, QUEUE.CONTROL),
 ];
 
 @Global()
@@ -65,6 +67,7 @@ const queueProviders: Provider[] = [
     QUEUE_OUTBOUND,
     QUEUE_INBOUND,
     QUEUE_HEALTH,
+    QUEUE_CONTROL,
   ],
 })
 export class RedisModule implements OnApplicationShutdown {

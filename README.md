@@ -57,10 +57,10 @@ curl -X POST http://localhost:3000/auth/login \
 ## Status (fases — ver §17 da espec)
 
 - [x] **Fase 1 — Fundação:** monorepo, Prisma schema completo, Postgres/Redis, auth admin, health/liveness, esqueleto do worker.
-- [ ] Fase 2 — Sessão Baileys (single) + auth state + proxy + pairing
-- [ ] Fase 3 — Multi-sessão (worker + supervisor + reconexão + kill switch)
-- [ ] Fase 4 — Leads (import CSV/XLSX + normalização + dedup + supressão + slug)
-- [ ] Fase 5 — Scheduler (rampa + teto + janela + jitter)
+- [x] **Fase 2 — Sessão Baileys:** sessão real (connect/QR/pairing code/reconnect), **auth state persistido no Postgres** (BufferJSON), bind de proxy estável antes do connect, canal de controle (PAIR/START/STOP/RETIRE) core↔worker, QR/status publicados no Redis, `ChipsModule`+`ProxiesModule` (`/chips`, `/chips/:id/pair`, bind-proxy, health).
+- [ ] Fase 3 — Multi-sessão (worker + supervisor + reconexão + kill switch) — *Supervisor já é multi-sessão; falta rebalanceamento entre workers*
+- [x] **Fase 4 — Leads:** import CSV **e** XLSX (`POST /flows/:id/leads/import`), normalização E.164, dedup (no arquivo + no fluxo), cruza supressão, slug por lead, `ImportBatch`; `FlowsModule` (campanha com defaults). XLSX trata telefone-como-número.
+- [~] Fase 5 — Disparo: **Disparo** (rodada de campanha com nº variável de chips **selecionados pelo nome**), CRUD de **templates** (abertura sem link), **insights por número** (nome/status/rampa/cap/saúde/taxa de resposta). *Falta o motor de revezamento (scheduler) que consome disparos RUNNING.*
 - [ ] Fase 6 — Conversational Engine (guards + prompt por Fluxo + IA + summary)
 - [ ] Fase 7 — Bridge de links
 - [ ] Fase 8 — Health Monitor + kill switch

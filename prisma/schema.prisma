@@ -32,9 +32,14 @@ model Flow {
   // Config de envio (sobrescreve default global se setado)
   sendConfig Json? // {dailyCapPerChip, window, rampCurve, jitterMs}
 
+  // Constantes de template da campanha (ex: {"valor":"R$ 97","garantia":"7 dias"}).
+  // Lead.meta (colunas do CSV) sobrescreve estas por lead.
+  variables Json?
+
   openingMessages OpeningMessage[]
   leads           Lead[]
   conversations   Conversation[]
+  dispatches      Dispatch[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 }
@@ -56,6 +61,34 @@ model OpeningMessage {
   active   Boolean @default(true)
 
   @@index([flowId])
+}
+
+// ============ DISPAROS (rodadas de campanha) ============
+model Dispatch {
+  id        String         @id @default(cuid())
+  flowId    String
+  flow      Flow           @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  name      String // nome do disparo (ex: "BF manha")
+  status    DispatchStatus @default(DRAFT)
+
+  // Politica de link na abertura (decidida POR DISPARO). Default false (anti-ban):
+  // {link} so e injetado na resposta/follow-up. Ligar = link ja na abertura.
+  allowLinkInOpening Boolean @default(false)
+
+  // Numeros participantes, selecionados PELO NOME. Reveza so entre estes.
+  chips WhatsappNumber[] @relation("DispatchChips")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([flowId])
+}
+
+enum DispatchStatus {
+  DRAFT
+  RUNNING
+  PAUSED
+  DONE
 }
 
 // ============ CHIPS (NUMEROS) ============
@@ -95,6 +128,7 @@ model WhatsappNumber {
 
   messages     Message[]
   healthEvents HealthEvent[]
+  dispatches   Dispatch[]    @relation("DispatchChips")
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 

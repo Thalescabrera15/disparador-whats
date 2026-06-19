@@ -18,6 +18,12 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(16, 'JWT_SECRET deve ter >= 16 chars'),
   JWT_EXPIRES_IN: z.string().default('12h'),
 
+  // Dev: permite parear sem proxy (NUNCA usar em producao - anti-ban exige proxy).
+  ALLOW_PAIR_WITHOUT_PROXY: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+
   // LLM (opcionais no boot - validados quando um Fluxo os usar)
   ANTHROPIC_API_KEY: z.string().optional().default(''),
   QWEN_BASE_URL: z.string().optional().default(''),

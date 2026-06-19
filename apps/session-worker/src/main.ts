@@ -1,5 +1,6 @@
 import { env } from './config/env';
 import IORedis from 'ioredis';
+import { disconnectPrisma, prisma } from './db/prisma';
 import { Supervisor } from './supervisor/supervisor';
 
 async function bootstrap(): Promise<void> {
@@ -9,13 +10,17 @@ async function bootstrap(): Promise<void> {
   connection.on('connect', () => console.log('[Worker] Redis conectado'));
   connection.on('error', (err) => console.error('[Worker] Redis erro:', err.message));
 
-  const supervisor = new Supervisor(connection, env.WORKER_ID);
+  await prisma.$connect();
+  console.log('[Worker] Postgres conectado');
+
+  const supervisor = new Supervisor(connection, env.WORKER_ID, prisma);
   await supervisor.start();
 
   const shutdown = async (signal: string) => {
     console.log(`[Worker] ${signal} recebido, encerrando...`);
     await supervisor.stop();
     await connection.quit();
+    await disconnectPrisma();
     process.exit(0);
   };
   process.on('SIGINT', () => void shutdown('SIGINT'));

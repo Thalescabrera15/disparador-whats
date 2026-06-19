@@ -1,34 +1,41 @@
+import type { PrismaClient } from '@prisma/client';
 import { Queue, Worker } from 'bullmq';
 import { Redis } from 'ioredis';
 import {
+  chipPairKey,
+  ControlCommand,
   HealthSignalJob,
   InboundEvent,
   OpeningJob,
   OutboundJob,
+  PAIR_STATE_TTL_SEC,
+  PairState,
   QUEUE,
+  type HealthSignalKind,
 } from '@dispatch/shared';
-import { ChipSession, StubChipSession } from '../session/session';
+import { env } from '../config/env';
+import { BaileysSession } from '../session/baileys-session';
+import type { ChipSession, SessionStatus } from '../session/session';
+import type { ProxyConfig } from '../proxy/proxy';
 
 /**
  * Coordena as sessoes deste worker:
- *  - mantem o mapa chipId -> ChipSession
- *  - consome OPENINGS/OUTBOUND (Core -> Worker) e roteia p/ a sessao do chip
+ *  - consome CONTROL (Core -> Worker): PAIR/START/STOP/RETIRE
+ *  - consome OPENINGS/OUTBOUND e roteia p/ a sessao do chip
+ *  - publica estado de pareamento (QR/status) no Redis p/ o painel
  *  - publica INBOUND/HEALTH (Worker -> Core)
- *  - aplica kill switch (pausar/derrubar 1 chip sem afetar vizinhos)
- *  - health-check periodico por sessao
- *
- * Fase 1: wiring de filas + stubs de sessao. Baileys real entra na Fase 2.
+ *  - reflete status do chip no Postgres
  */
 export class Supervisor {
   private readonly sessions = new Map<string, ChipSession>();
   private readonly workers: Worker[] = [];
   private inboundQueue!: Queue<InboundEvent>;
   private healthQueue!: Queue<HealthSignalJob>;
-  private healthTimer?: NodeJS.Timeout;
 
   constructor(
     private readonly connection: Redis,
     private readonly workerId: string,
+    private readonly prisma: PrismaClient,
   ) {}
 
   async start(): Promise<void> {
@@ -40,6 +47,12 @@ export class Supervisor {
     });
 
     this.workers.push(
+      new Worker<ControlCommand>(QUEUE.CONTROL, (job) => this.onControl(job.data), {
+        connection: this.connection,
+        concurrency: 4,
+      }),
+    );
+    this.workers.push(
       new Worker<OpeningJob>(QUEUE.OPENINGS, (job) => this.onOpening(job.data), {
         connection: this.connection,
       }),
@@ -50,49 +63,209 @@ export class Supervisor {
       }),
     );
 
-    this.healthTimer = setInterval(() => this.healthCheck(), 30_000);
-    console.log(`[Supervisor ${this.workerId}] pronto (aguardando jobs)`);
+    console.log(`[Supervisor ${this.workerId}] pronto (aguardando comandos/jobs)`);
   }
 
-  /** Garante uma sessao p/ o chip (stub na Fase 1). */
-  private ensureSession(chipId: string): ChipSession {
-    let session = this.sessions.get(chipId);
-    if (!session) {
-      session = new StubChipSession(chipId);
-      this.sessions.set(chipId, session);
-      void session.start();
+  // ---------------- ciclo de vida da sessao ----------------
+
+  private async onControl(cmd: ControlCommand): Promise<void> {
+    console.log(`[Supervisor] CONTROL ${cmd.type} chip=${cmd.chipId}`);
+    switch (cmd.type) {
+      case 'PAIR':
+      case 'START':
+        await this.startSession(cmd.chipId, cmd.usePairingCode);
+        break;
+      case 'STOP':
+        await this.stopSession(cmd.chipId, 'PAUSED');
+        break;
+      case 'RETIRE':
+        await this.stopSession(cmd.chipId, 'RETIRED');
+        break;
     }
-    return session;
   }
+
+  private async startSession(
+    chipId: string,
+    usePairingCode?: boolean,
+  ): Promise<void> {
+    if (this.sessions.has(chipId)) return; // ja ativa
+
+    const chip = await this.prisma.whatsappNumber.findUnique({
+      where: { id: chipId },
+      select: { id: true, phone: true },
+    });
+    if (!chip) {
+      console.error(`[Supervisor] chip ${chipId} inexistente`);
+      return;
+    }
+
+    const session = new BaileysSession({
+      prisma: this.prisma,
+      chipId,
+      phone: chip.phone,
+      usePairingCode,
+      allowWithoutProxy: env.ALLOW_PAIR_WITHOUT_PROXY,
+      getProxy: () => this.loadProxy(chipId),
+      hooks: {
+        onStatus: (id, status) => void this.publishPairState(id, status),
+        onQR: (id, qr) => void this.publishPairState(id, 'PAIRING', { qr }),
+        onPairingCode: (id, code) =>
+          void this.publishPairState(id, 'PAIRING', { code }),
+        onInbound: (id, msg) => void this.publishInbound(id, msg),
+        onHealth: (id, kind, detail) => void this.publishHealth(id, kind, detail),
+      },
+    });
+
+    this.sessions.set(chipId, session);
+    try {
+      await session.start();
+    } catch (err) {
+      console.error(`[Supervisor] falha ao iniciar sessao ${chipId}:`, err);
+      this.sessions.delete(chipId);
+    }
+  }
+
+  private async stopSession(
+    chipId: string,
+    finalStatus: 'PAUSED' | 'RETIRED',
+  ): Promise<void> {
+    const session = this.sessions.get(chipId);
+    // So age (e escreve status) se ESTE worker hospeda o chip. A fila CONTROL e
+    // compartilhada (competing consumers): sem este guard, um STOP destinado a
+    // outro worker sobrescreveria o status de um chip ativo alheio.
+    if (!session) return;
+    await session.stop();
+    this.sessions.delete(chipId);
+    await this.prisma.whatsappNumber.update({
+      where: { id: chipId },
+      data: { status: finalStatus },
+    });
+  }
+
+  /** Kill switch: derruba 1 chip isoladamente (sem afetar vizinhos). */
+  async killChip(chipId: string): Promise<void> {
+    await this.stopSession(chipId, 'PAUSED');
+  }
+
+  // ---------------- envio (roteamento de jobs) ----------------
 
   private async onOpening(job: OpeningJob): Promise<void> {
-    // TODO Fase 2: this.ensureSession(job.chipId).send({...})
-    console.log(
-      `[Supervisor] OPENING lead=${job.leadId} chip=${job.chipId} (envio real na Fase 2)`,
-    );
+    const session = this.sessions.get(job.chipId);
+    if (!session) {
+      // Fase 2: sem auto-start de sessao em job de envio (vem na Fase 3/5).
+      throw new Error(`sessao do chip ${job.chipId} nao esta ativa`);
+    }
+    await session.send({ to: job.to, type: 'TEXT', parts: [job.text] });
   }
 
   private async onOutbound(job: OutboundJob): Promise<void> {
-    // TODO Fase 2: envio real pelo mesmo chip da conversa.
-    console.log(
-      `[Supervisor] OUTBOUND conv=${job.conversationId} chip=${job.chipId} (envio real na Fase 2)`,
+    const session = this.sessions.get(job.chipId);
+    if (!session) throw new Error(`sessao do chip ${job.chipId} nao esta ativa`);
+    await session.send({
+      to: job.to,
+      type: job.type,
+      parts: job.parts,
+      mediaUrl: job.mediaUrl,
+      typingDelaysMs: job.typingDelaysMs,
+    });
+  }
+
+  // ---------------- publicacao de estado ----------------
+
+  private async publishPairState(
+    chipId: string,
+    status: SessionStatus,
+    extra?: { qr?: string; code?: string },
+  ): Promise<void> {
+    const state: PairState = {
+      chipId,
+      status,
+      qr: extra?.qr,
+      code: extra?.code,
+      updatedAt: Date.now(),
+    };
+    await this.connection.set(
+      chipPairKey(chipId),
+      JSON.stringify(state),
+      'EX',
+      PAIR_STATE_TTL_SEC,
     );
+
+    // Reflete no Postgres: chip recem-conectado entra aquecendo (rampa minima).
+    if (status === 'CONNECTED') {
+      await this.prisma.whatsappNumber.updateMany({
+        where: { id: chipId, status: 'NEW' },
+        data: { status: 'WARMING', rampDay: 1, dailyCap: 5 },
+      });
+      await this.prisma.whatsappNumber.update({
+        where: { id: chipId },
+        data: { lastSignalAt: new Date() },
+      });
+    }
   }
 
-  private healthCheck(): void {
-    // TODO Fase 2/3: inspecionar cada sessao e publicar sinais em healthQueue.
+  private async publishInbound(
+    chipId: string,
+    msg: {
+      from: string;
+      type: InboundEvent['type'];
+      content: string;
+      mediaUrl?: string;
+      waMessageId?: string;
+    },
+  ): Promise<void> {
+    const event: InboundEvent = {
+      chipId,
+      from: msg.from,
+      type: msg.type,
+      content: msg.content,
+      mediaUrl: msg.mediaUrl,
+      waMessageId: msg.waMessageId,
+      timestamp: Date.now(),
+    };
+    await this.inboundQueue.add('inbound', event);
   }
 
-  /** Kill switch: pausa/derruba 1 chip isoladamente. */
-  async killChip(chipId: string): Promise<void> {
-    const session = this.sessions.get(chipId);
-    if (session) await session.stop();
+  private async publishHealth(
+    chipId: string,
+    kind: HealthSignalKind,
+    detail?: Record<string, unknown>,
+  ): Promise<void> {
+    await this.healthQueue.add('health', {
+      chipId,
+      kind,
+      detail,
+      timestamp: Date.now(),
+    });
   }
+
+  // ---------------- proxy ----------------
+
+  private async loadProxy(chipId: string): Promise<ProxyConfig | null> {
+    const chip = await this.prisma.whatsappNumber.findUnique({
+      where: { id: chipId },
+      select: {
+        proxy: {
+          select: {
+            host: true,
+            port: true,
+            username: true,
+            password: true,
+            type: true,
+            region: true,
+          },
+        },
+      },
+    });
+    if (!chip?.proxy) return null;
+    return { ...chip.proxy, protocol: 'http' };
+  }
+
+  // ---------------- shutdown ----------------
 
   async stop(): Promise<void> {
-    if (this.healthTimer) clearInterval(this.healthTimer);
-    await Promise.all(this.workers.map((w) => w.close()));
     await Promise.all([...this.sessions.values()].map((s) => s.stop()));
+    await Promise.all(this.workers.map((w) => w.close()));
     await this.inboundQueue?.close();
     await this.healthQueue?.close();
   }
