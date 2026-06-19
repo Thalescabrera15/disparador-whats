@@ -32,11 +32,11 @@ export class QwenAdapter implements LlmAdapter {
       stream: false,
     };
     if (isVenice) {
-      // sem censura = só o NOSSO system prompt; e tira os blocos <think> do Qwen.
-      body.venice_parameters = {
-        include_venice_system_prompt: false,
-        strip_thinking_response: true,
-      };
+      // sem censura = só o NOSSO system prompt (e economiza ~1700 tokens do
+      // prompt padrao da Venice). NAO usar strip_thinking_response: ele inlina
+      // o <think> e estoura o teto; o raciocinio do Qwen vai num campo separado
+      // e o content ja vem limpo (limpamos <think> abaixo por seguranca).
+      body.venice_parameters = { include_venice_system_prompt: false };
     }
     const retries = this.opts.retries ?? 2;
 
@@ -72,7 +72,9 @@ export class QwenAdapter implements LlmAdapter {
         const json = (await res.json()) as {
           choices?: { message?: { content?: string } }[];
         };
-        const content = json.choices?.[0]?.message?.content?.trim();
+        const content = json.choices?.[0]?.message?.content
+          ?.replace(/<think>[\s\S]*?<\/think>/gi, '') // safety p/ <think> inline
+          .trim();
         if (!content) throw new Error('resposta do modelo vazia');
         return content;
       } catch (err) {
