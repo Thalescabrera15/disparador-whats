@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ChipStatus, Prisma } from '@prisma/client';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import {
@@ -33,18 +34,61 @@ export class ChipsService {
   ) {}
 
   async create(dto: CreateChipDto) {
-    const phone = normalizeE164(dto.phone);
+    let phone: string;
+    try {
+      phone = normalizeE164(dto.phone);
+    } catch {
+      throw new BadRequestException(`Telefone invalido: ${dto.phone}`);
+    }
     if (dto.proxyId) await this.assertRegionMatch(phone, dto.proxyId);
 
-    return this.prisma.whatsappNumber.create({
-      data: {
-        label: dto.label,
-        phone,
-        proxyId: dto.proxyId ?? null,
-        windowStart: this.config.get<number>('DEFAULT_WINDOW_START', 9),
-        windowEnd: this.config.get<number>('DEFAULT_WINDOW_END', 20),
-      },
+    const existing = await this.prisma.whatsappNumber.findUnique({
+      where: { phone },
+      select: { id: true, label: true, status: true },
     });
+    if (existing) {
+      if (existing.status === ChipStatus.RETIRED) {
+        return this.prisma.whatsappNumber.update({
+          where: { id: existing.id },
+          data: {
+            label: dto.label,
+            status: ChipStatus.NEW,
+            proxyId: dto.proxyId ?? null,
+            rampDay: 0,
+            dailyCap: 0,
+            sentToday: 0,
+            healthScore: 100,
+            consecFails: 0,
+            authState: Prisma.DbNull,
+          },
+        });
+      }
+      throw new BadRequestException(
+        `O numero ${phone} ja esta cadastrado como "${existing.label}" (${existing.status}).`,
+      );
+    }
+
+    try {
+      return await this.prisma.whatsappNumber.create({
+        data: {
+          label: dto.label,
+          phone,
+          proxyId: dto.proxyId ?? null,
+          windowStart: this.config.get<number>('DEFAULT_WINDOW_START', 9),
+          windowEnd: this.config.get<number>('DEFAULT_WINDOW_END', 20),
+        },
+      });
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        throw new BadRequestException(
+          `O numero ${phone} ja esta cadastrado no sistema.`,
+        );
+      }
+      throw err;
+    }
   }
 
   list() {
