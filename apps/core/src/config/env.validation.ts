@@ -57,6 +57,9 @@ const envSchema = z.object({
   RAMP_CURVE: z.string().default('5,8,15,25,35,45,55'),
   JITTER_MIN_MS: z.coerce.number().int().nonnegative().default(45000),
   JITTER_MAX_MS: z.coerce.number().int().nonnegative().default(180000),
+  WARMING_ACTIVE_AFTER_DAYS: z.coerce.number().int().positive().default(7),
+  DELIVERY_TIMEOUT_MS: z.coerce.number().int().positive().default(300_000),
+  READ_TIMEOUT_MS: z.coerce.number().int().positive().default(3_600_000),
 
   // Scheduler (motor de disparo)
   SCHEDULER_ENABLED: z

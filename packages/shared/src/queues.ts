@@ -28,6 +28,8 @@ export type OutboundMsgType = 'TEXT' | 'AUDIO' | 'IMAGE' | 'PDF';
 export interface OpeningJob {
   leadId: string;
   chipId: string;
+  /** ID da Message ja gravada no Core (para vincular waMessageId e receipts). */
+  messageId: string;
   to: string; // E.164
   text: string; // template ja renderizado
   /** Delay de digitacao (ms) antes de enviar (humanizacao). */

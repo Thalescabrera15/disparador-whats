@@ -1,4 +1,4 @@
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsOptional, IsString, MaxLength, IsInt, Min, Max, IsArray, ArrayMinSize, ArrayMaxSize } from 'class-validator';
 
 export class CreateChipDto {
   @IsString()
@@ -29,4 +29,39 @@ export class RenameChipDto {
   @IsString()
   @MaxLength(60)
   label!: string;
+}
+
+/** Config anti-ban por chip: janela comercial, dias de descanso, rampa. */
+export class UpdateChipConfigDto {
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(23)
+  windowStart?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(24)
+  windowEnd?: number;
+
+  /** Dias de descanso (0=Dom .. 6=Sab, fuso SCHEDULER_TZ). */
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(0)
+  @ArrayMaxSize(7)
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  @Max(6, { each: true })
+  restDays?: number[];
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  rampDay?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  dailyCap?: number;
 }

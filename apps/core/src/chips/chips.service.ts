@@ -15,7 +15,7 @@ import {
 import { normalizeE164 } from '../common/phone';
 import { PrismaService } from '../prisma/prisma.service';
 import { QUEUE_CONTROL, REDIS_CONNECTION } from '../redis/redis.tokens';
-import { BindProxyDto, CreateChipDto } from './dto/create-chip.dto';
+import { BindProxyDto, CreateChipDto, UpdateChipConfigDto } from './dto/create-chip.dto';
 
 /** DDI -> pais (minimo; o projeto e BR). */
 function ddiCountry(phoneE164: string): string | null {
@@ -37,7 +37,13 @@ export class ChipsService {
     if (dto.proxyId) await this.assertRegionMatch(phone, dto.proxyId);
 
     return this.prisma.whatsappNumber.create({
-      data: { label: dto.label, phone, proxyId: dto.proxyId ?? null },
+      data: {
+        label: dto.label,
+        phone,
+        proxyId: dto.proxyId ?? null,
+        windowStart: this.config.get<number>('DEFAULT_WINDOW_START', 9),
+        windowEnd: this.config.get<number>('DEFAULT_WINDOW_END', 20),
+      },
     });
   }
 
@@ -139,6 +145,39 @@ export class ChipsService {
     });
   }
 
+  /** Configura janela comercial, dias de descanso e rampa do chip. */
+  async updateConfig(id: string, dto: UpdateChipConfigDto) {
+    await this.get(id);
+    if (
+      dto.windowStart !== undefined &&
+      dto.windowEnd !== undefined &&
+      dto.windowStart >= dto.windowEnd
+    ) {
+      throw new BadRequestException('windowStart deve ser menor que windowEnd');
+    }
+    return this.prisma.whatsappNumber.update({
+      where: { id },
+      data: {
+        ...(dto.windowStart !== undefined ? { windowStart: dto.windowStart } : {}),
+        ...(dto.windowEnd !== undefined ? { windowEnd: dto.windowEnd } : {}),
+        ...(dto.restDays !== undefined ? { restDays: dto.restDays } : {}),
+        ...(dto.rampDay !== undefined ? { rampDay: dto.rampDay } : {}),
+        ...(dto.dailyCap !== undefined ? { dailyCap: dto.dailyCap } : {}),
+      },
+      select: {
+        id: true,
+        label: true,
+        windowStart: true,
+        windowEnd: true,
+        restDays: true,
+        rampDay: true,
+        dailyCap: true,
+        sentToday: true,
+        status: true,
+      },
+    });
+  }
+
   /**
    * Insights por numero (identificados pelo NOME). Status, rampa, capacidade,
    * saude e taxa de resposta (aprox: msgs IN / OUT do chip).
@@ -158,6 +197,10 @@ export class ChipsService {
         consecFails: true,
         lastSignalAt: true,
         proxyId: true,
+        windowStart: true,
+        windowEnd: true,
+        restDays: true,
+        proxy: { select: { id: true, region: true, type: true, host: true } },
       },
     });
 
@@ -175,17 +218,30 @@ export class ChipsService {
       byChip.set(c.chipId, e);
     }
 
-    return chips.map((chip) => {
-      const m = byChip.get(chip.id) ?? { in: 0, out: 0 };
-      const responseRate = m.out > 0 ? +(m.in / m.out).toFixed(3) : 0;
-      return {
-        ...chip,
-        freeCapacity: Math.max(chip.dailyCap - chip.sentToday, 0),
-        sent: m.out,
-        received: m.in,
-        responseRate, // aprox: respostas:envios
-      };
-    });
+    return Promise.all(
+      chips.map(async (chip) => {
+        const m = byChip.get(chip.id) ?? { in: 0, out: 0 };
+        const responseRate = m.out > 0 ? +(m.in / m.out).toFixed(3) : 0;
+        const session = await this.readPairState(chip.id);
+        return {
+          ...chip,
+          freeCapacity: Math.max(chip.dailyCap - chip.sentToday, 0),
+          sent: m.out,
+          received: m.in,
+          responseRate,
+          sessionStatus: session.status,
+          sessionUpdatedAt: session.updatedAt,
+        };
+      }),
+    );
+  }
+
+  private async readPairState(chipId: string): Promise<PairState> {
+    const raw = await this.redis.get(chipPairKey(chipId));
+    if (!raw) {
+      return { chipId, status: 'INIT', updatedAt: 0 };
+    }
+    return JSON.parse(raw) as PairState;
   }
 
   async health(id: string) {

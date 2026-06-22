@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { invitesReply } from '@dispatch/shared';
 import {
   buildLeadContext,
   extractVariables,
@@ -19,6 +20,7 @@ export class OpeningMessagesService {
   async create(flowId: string, dto: CreateOpeningMessageDto) {
     await this.assertFlow(flowId);
     this.assertNoLink(dto.template);
+    this.assertInvitesReply(dto.template);
     const msg = await this.prisma.openingMessage.create({
       data: {
         flowId,
@@ -79,7 +81,10 @@ export class OpeningMessagesService {
 
   async update(flowId: string, id: string, dto: UpdateOpeningMessageDto) {
     await this.assertOwned(flowId, id);
-    if (dto.template !== undefined) this.assertNoLink(dto.template);
+    if (dto.template !== undefined) {
+      this.assertNoLink(dto.template);
+      this.assertInvitesReply(dto.template);
+    }
     return this.prisma.openingMessage.update({
       where: { id },
       data: {
@@ -101,6 +106,15 @@ export class OpeningMessagesService {
     if (/https?:\/\/|www\.|\b[a-z0-9-]+\.(com|net|br|io|co)\b/i.test(template)) {
       throw new BadRequestException(
         'a abertura nao pode conter link/URL (link so depois da resposta do lead)',
+      );
+    }
+  }
+
+  /** Abertura deve convidar o lead a responder (pergunta ou CTA conversacional). */
+  private assertInvitesReply(template: string): void {
+    if (!invitesReply(template)) {
+      throw new BadRequestException(
+        'a abertura deve convidar o lead a responder (ex: pergunta ou pedido de retorno)',
       );
     }
   }

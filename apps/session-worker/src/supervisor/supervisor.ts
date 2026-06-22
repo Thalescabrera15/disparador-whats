@@ -189,12 +189,18 @@ export class Supervisor {
       throw new Error(`sessao do chip ${job.chipId} nao esta ativa`);
     }
     try {
-      await session.send({
+      const result = await session.send({
         to: job.to,
         type: 'TEXT',
         parts: [job.text],
         typingDelaysMs: job.typingDelayMs ? [job.typingDelayMs] : undefined,
       });
+      if (job.messageId && result.waMessageId) {
+        await this.prisma.message.update({
+          where: { id: job.messageId },
+          data: { waMessageId: result.waMessageId },
+        });
+      }
     } catch (err) {
       await this.publishHealth(job.chipId, 'SEND_FAIL', {
         error: (err as Error).message,

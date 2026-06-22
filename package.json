@@ -9,9 +9,13 @@
   },
   "scripts": {
     "build": "pnpm -r build",
+    "build:panel": "pnpm --filter @dispatch/panel build && node scripts/sync-panel.mjs",
     "core:dev": "pnpm --filter @dispatch/core start:dev",
     "worker:dev": "pnpm --filter @dispatch/session-worker start:dev",
     "panel:dev": "pnpm --filter @dispatch/panel dev",
+    "dev:infra": "docker compose up -d",
+    "dev:setup": "pnpm dev:infra && pnpm --filter @dispatch/shared build && pnpm db:generate && pnpm db:migrate && pnpm db:seed",
+    "dev": "pnpm build:panel && concurrently -n core,worker,panel -c green,blue,magenta \"pnpm core:dev\" \"pnpm worker:dev\" \"pnpm panel:dev\"",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
@@ -26,6 +30,7 @@
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.10.0",
+    "concurrently": "^10.0.3",
     "prettier": "^3.4.2",
     "prisma": "^6.2.0",
     "ts-node": "^10.9.2",

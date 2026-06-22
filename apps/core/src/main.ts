@@ -23,7 +23,17 @@ async function bootstrap(): Promise<void> {
   const port = Number(process.env.PORT) || config.get<number>('CORE_PORT', 3000);
 
   await app.listen(port, '0.0.0.0');
+
+  const http = app.getHttpAdapter().getInstance();
+  http.get('/', (_req: unknown, res: { redirect: (url: string) => void }) =>
+    res.redirect('/app/'),
+  );
+  http.get('/app', (_req: unknown, res: { redirect: (url: string) => void }) =>
+    res.redirect('/app/'),
+  );
+
   new Logger('Bootstrap').log(`Core ouvindo na porta ${port}`);
+  new Logger('Bootstrap').log(`Painel: http://localhost:${port}/app/`);
 }
 
 bootstrap();

@@ -201,6 +201,23 @@ export class BaileysSession implements ChipSession {
         });
       }
     });
+
+    // Receipts de entrega/leitura (anti-ban: monitor de saude por chip).
+    sock.ev.on('messages.update', (updates) => {
+      if (this.sock !== sock) return;
+      for (const { key, update } of updates) {
+        if (!key.fromMe || !key.id) continue;
+        const status = update.status;
+        if (status === undefined || status === null) continue;
+        // WAMessageStatus: SERVER_ACK=2, DELIVERY_ACK=3, READ=4, PLAYED=5
+        if (status >= 3) {
+          void this.markDelivered(key.id);
+        }
+        if (status >= 4) {
+          void this.markRead(key.id);
+        }
+      }
+    });
   }
 
   /** Apaga creds persistidas (apos logoff) p/ forcar novo pareamento. */
@@ -308,5 +325,35 @@ export class BaileysSession implements ChipSession {
   private setStatus(status: SessionStatus): void {
     this.status = status;
     this.opts.hooks?.onStatus?.(this.chipId, status);
+  }
+
+  private async markDelivered(waMessageId: string): Promise<void> {
+    try {
+      await this.opts.prisma.message.updateMany({
+        where: {
+          chipId: this.chipId,
+          waMessageId,
+          deliveredAt: null,
+        },
+        data: { deliveredAt: new Date() },
+      });
+    } catch (err) {
+      logger.warn({ chipId: this.chipId, waMessageId, err }, 'markDelivered falhou');
+    }
+  }
+
+  private async markRead(waMessageId: string): Promise<void> {
+    try {
+      await this.opts.prisma.message.updateMany({
+        where: {
+          chipId: this.chipId,
+          waMessageId,
+          readAt: null,
+        },
+        data: { readAt: new Date() },
+      });
+    } catch (err) {
+      logger.warn({ chipId: this.chipId, waMessageId, err }, 'markRead falhou');
+    }
   }
 }

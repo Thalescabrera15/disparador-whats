@@ -14,6 +14,7 @@ import {
   CreateChipDto,
   PairChipDto,
   RenameChipDto,
+  UpdateChipConfigDto,
 } from './dto/create-chip.dto';
 
 @Controller('chips')
@@ -46,6 +47,12 @@ export class ChipsController {
   @Patch(':id/rename')
   rename(@Param('id') id: string, @Body() dto: RenameChipDto) {
     return this.chips.rename(id, dto.label);
+  }
+
+  /** Janela comercial, dias de descanso e rampa por chip. */
+  @Patch(':id/config')
+  updateConfig(@Param('id') id: string, @Body() dto: UpdateChipConfigDto) {
+    return this.chips.updateConfig(id, dto);
   }
 
   @Post(':id/bind-proxy')

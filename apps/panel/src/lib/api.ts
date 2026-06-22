@@ -58,11 +58,22 @@ export const api = {
 
   // chips
   listChips: () => req('GET', '/chips'),
+  getChip: (id: string) => req('GET', `/chips/${id}`),
   chipInsights: () => req('GET', '/chips/insights'),
   createChip: (label: string, phone: string, proxyId?: string) =>
     req('POST', '/chips', { label, phone, proxyId }),
   renameChip: (id: string, label: string) =>
     req('PATCH', `/chips/${id}/rename`, { label }),
+  updateChipConfig: (
+    id: string,
+    body: {
+      windowStart?: number;
+      windowEnd?: number;
+      restDays?: number[];
+      rampDay?: number;
+      dailyCap?: number;
+    },
+  ) => req('PATCH', `/chips/${id}/config`, body),
   pairChip: (id: string, usePairingCode = false) =>
     req('POST', `/chips/${id}/pair`, { usePairingCode }),
   pairState: (id: string) => req('GET', `/chips/${id}/pair`),
